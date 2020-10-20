@@ -37,6 +37,10 @@ class ElementNotFoundError(Exception):
     """Raised when requested element does not exist"""
     pass
 
+class NoteNotFoundError(Exception):
+    """Raised when requested note does not exist"""
+    pass
+
 class Command(BaseCommand):
     help = 'Launches the Discord bot'
 
@@ -136,6 +140,66 @@ class Command(BaseCommand):
             if DiscordUser.objects.filter(user_id=user).exists():
                 user = DiscordUser.objects.get(user_id=user)
                 return [s.name for s in Story.objects.filter(owner=user)]
+            else:
+                raise UserNotCreatedError
+
+        @sync_to_async
+        def list_elements_by_type(user, story, type):
+            if DiscordUser.objects.filter(user_id=user).exists():
+                user = DiscordUser.objects.get(user_id=user)
+                if Story.objects.filter(owner=user, name=story).exists():
+                    story = Story.objects.get(owner=user, name=story)
+                    if StoryElement.objects.filter(story=story, type=type).exists():
+                        if type == StoryElement.PLOTPOINT:
+                            return [(p.index.name, p.header) for p in PlotPoint.objects.filter(index__story=story)]
+                        return [e.name for e in StoryElement.objects.filter(story=story, type=type)]
+                    else:
+                        raise ElementNotFoundError
+                else:
+                    raise StoryNotFoundError
+            else:
+                raise UserNotCreatedError
+
+        @sync_to_async
+        def list_notes(user, element, story):
+            if DiscordUser.objects.filter(user_id=user).exists():
+                user = DiscordUser.objects.get(user_id=user)
+                if Story.objects.filter(owner=user, name=story).exists():
+                    story = Story.objects.get(owner=user, name=story)
+                    if StoryElement.objects.filter(story=story, name=element).exists():
+                        try:
+                            element = StoryElement.objects.get(story=story, name=element)
+                            if Note.objects.filter(element=element).exists():
+                                return [n.note for n in Note.objects.filter(element=element)]
+                            else:
+                                raise NoteNotFoundError
+                        except MultipleObjectsReturned:
+                            elements = StoryElement.objects.filter(story=story, name=element)
+                            type_list = [element.get_type_display() for element in elements]
+                            raise MultipleObjectsReturned(type_list)
+                    else:
+                        raise ElementNotFoundError
+                else:
+                    raise StoryNotFoundError
+            else:
+                raise UserNotCreatedError
+
+        @sync_to_async
+        def list_notes_by_type(user, element, type, story):
+            if DiscordUser.objects.filter(user_id=user).exists():
+                user = DiscordUser.objects.get(user_id=user)
+                if Story.objects.filter(owner=user, name=story).exists():
+                    story = Story.objects.get(owner=user, name=story)
+                    if StoryElement.objects.filter(story=story, name=element, type=type).exists():
+                        element = StoryElement.objects.get(story=story, name=element, type=type)
+                        if Note.objects.filter(element=element).exists():
+                            return [n.note for n in Note.objects.filter(element=element)]
+                        else:
+                            raise NoteNotFoundError
+                    else:
+                        raise ElementNotFoundError
+                else:
+                    raise StoryNotFoundError
             else:
                 raise UserNotCreatedError
 
@@ -287,6 +351,145 @@ class Command(BaseCommand):
                         await message.channel.send(message.author.mention+ ' ' + msg)
                     except UserNotCreatedError:
                         await message.channel.send(message.author.mention+ ' You have not created any stories yet.')
+                if message.content.startswith('!ficnotesbot list characters in '):
+                    story = message.content.split('!ficnotesbot list characters in ')[1]
+                    try:
+                        list = await list_elements_by_type(message.author.id, story, StoryElement.CHARACTER)
+                        msg = story + " characters:\n"
+                        for character in list:
+                            msg = msg + '* ' + character + '\n'
+                        await message.channel.send(message.author.mention+ ' ' + msg)
+                    except UserNotCreatedError:
+                        await message.channel.send(message.author.mention+ ' You have not created any stories yet.')
+                    except StoryNotFoundError:
+                        await message.channel.send(message.author.mention+ ' ' + story + ' not found. Try adding it first with "!ficnotesbot add story ' + story + '".')
+                    except ElementNotFoundError:
+                        await message.channel.send(message.author.mention+ ' You have not added any characters to ' + story + '. Try adding one first with "!ficnotesbot add character [name] > ' + story + '".')
+                if message.content.startswith('!ficnotesbot list objects in '):
+                    story = message.content.split('!ficnotesbot list objects in ')[1]
+                    try:
+                        list = await list_elements_by_type(message.author.id, story, StoryElement.OBJECT)
+                        msg = story + " objects:\n"
+                        for object in list:
+                            msg = msg + '* ' + object + '\n'
+                        await message.channel.send(message.author.mention+ ' ' + msg)
+                    except UserNotCreatedError:
+                        await message.channel.send(message.author.mention+ ' You have not created any stories yet.')
+                    except StoryNotFoundError:
+                        await message.channel.send(message.author.mention+ ' ' + story + ' not found. Try adding it first with "!ficnotesbot add story ' + story + '".')
+                    except ElementNotFoundError:
+                        await message.channel.send(message.author.mention+ ' You have not added any objects to ' + story + '. Try adding one first with "!ficnotesbot add object [name] > ' + story + '".')
+                if message.content.startswith('!ficnotesbot list events in '):
+                    story = message.content.split('!ficnotesbot list events in ')[1]
+                    try:
+                        list = await list_elements_by_type(message.author.id, story, StoryElement.EVENT)
+                        msg = story + " events:\n"
+                        for event in list:
+                            msg = msg + '* ' + event + '\n'
+                        await message.channel.send(message.author.mention+ ' ' + msg)
+                    except UserNotCreatedError:
+                        await message.channel.send(message.author.mention+ ' You have not created any stories yet.')
+                    except StoryNotFoundError:
+                        await message.channel.send(message.author.mention+ ' ' + story + ' not found. Try adding it first with "!ficnotesbot add story ' + story + '".')
+                    except ElementNotFoundError:
+                        await message.channel.send(message.author.mention+ ' You have not added any events to ' + story + '. Try adding one first with "!ficnotesbot add event [name] > ' + story + '".')
+                if message.content.startswith('!ficnotesbot list places in '):
+                    story = message.content.split('!ficnotesbot list places in ')[1]
+                    try:
+                        list = await list_elements_by_type(message.author.id, story, StoryElement.PLACE)
+                        msg = story + " places:\n"
+                        for place in list:
+                            msg = msg + '* ' + place + '\n'
+                        await message.channel.send(message.author.mention+ ' ' + msg)
+                    except UserNotCreatedError:
+                        await message.channel.send(message.author.mention+ ' You have not created any stories yet.')
+                    except StoryNotFoundError:
+                        await message.channel.send(message.author.mention+ ' ' + story + ' not found. Try adding it first with "!ficnotesbot add story ' + story + '".')
+                    except ElementNotFoundError:
+                        await message.channel.send(message.author.mention+ ' You have not added any places to ' + story + '. Try adding one first with "!ficnotesbot add place [name] > ' + story + '".')
+                if message.content.startswith('!ficnotesbot list concepts in '):
+                    story = message.content.split('!ficnotesbot list concepts in ')[1]
+                    try:
+                        list = await list_elements_by_type(message.author.id, story, StoryElement.CONCEPT)
+                        msg = story + " concepts:\n"
+                        for concept in list:
+                            msg = msg + '* ' + concept + '\n'
+                        await message.channel.send(message.author.mention+ ' ' + msg)
+                    except UserNotCreatedError:
+                        await message.channel.send(message.author.mention+ ' You have not created any stories yet.')
+                    except StoryNotFoundError:
+                        await message.channel.send(message.author.mention+ ' ' + story + ' not found. Try adding it first with "!ficnotesbot add story ' + story + '".')
+                    except ElementNotFoundError:
+                        await message.channel.send(message.author.mention+ ' You have not added any concepts to ' + story + '. Try adding one first with "!ficnotesbot add concept [name] > ' + story + '".')
+                if message.content.startswith('!ficnotesbot list plotpoints in '):
+                    story = message.content.split('!ficnotesbot list plotpoints in ')[1]
+                    try:
+                        list = await list_elements_by_type(message.author.id, story, StoryElement.PLOTPOINT)
+                        msg = story + " plot points:\n"
+                        for plotpoint in list:
+                            msg = msg + '* ' + plotpoint[0] + ' ' + plotpoint[1] + '\n'
+                        await message.channel.send(message.author.mention+ ' ' + msg)
+                    except UserNotCreatedError:
+                        await message.channel.send(message.author.mention+ ' You have not created any stories yet.')
+                    except StoryNotFoundError:
+                        await message.channel.send(message.author.mention+ ' ' + story + ' not found. Try adding it first with "!ficnotesbot add story ' + story + '".')
+                    except ElementNotFoundError:
+                        await message.channel.send(message.author.mention+ ' You have not added any plot points to ' + story + '. Try adding one first with "!ficnotesbot add plotpoint "[index]" [header] > ' + story + '".')
+                if message.content.startswith('!ficnotesbot list notes for '):
+                    element_story = message.content.split('!ficnotesbot list notes for ')[1]
+                    element = element_story.split(' > ')[0]
+                    story = element_story.split(' > ')[1]
+                    try:
+                        list = await list_notes(message.author.id, element, story)
+                        msg = element + " notes:\n"
+                        for note in list:
+                            msg = msg + '* ' + note + '\n'
+                        await message.channel.send(message.author.mention+ ' ' + msg)
+                    except UserNotCreatedError:
+                        await message.channel.send(message.author.mention+ ' You have not created any stories yet.')
+                    except StoryNotFoundError:
+                        await message.channel.send(message.author.mention+ ' ' + story + ' not found. Try adding it first with "!ficnotesbot add story ' + story + '".')
+                    except ElementNotFoundError:
+                        await message.channel.send(message.author.mention+ ' ' + element + ' not found in ' + story + '. Try adding it first with "!ficnotesbot add [type] ' + element + ' > ' + story + '".')
+                    except NoteNotFoundError:
+                        await message.channel.send(message.author.mention+ ' You have not added any notes to ' + element + '. Try adding one first with "!ficnotesbot add note [note_text] > ' + element + ' > ' + story + '".')
+                    except MultipleObjectsReturned as e:
+                        message_str = message.author.mention + ' Which ' + element + ' did you mean?\n'
+                        emoji = ['6️⃣', '5️⃣', '4️⃣', '3️⃣', '2️⃣', '1️⃣']
+                        sent_emoji = {}
+                        for type in e.args[0]:
+                            em = emoji.pop()
+                            message_str = message_str + ' ' + em + ' - ' + type + '\n'
+                            sent_emoji[em] = type
+                        qmsg = await message.channel.send(message_str)
+                        if '1️⃣' not in emoji:
+                            await qmsg.add_reaction('1️⃣')
+                        if '2️⃣' not in emoji:
+                            await qmsg.add_reaction('2️⃣')
+                        if '3️⃣' not in emoji:
+                            await qmsg.add_reaction('3️⃣')
+                        if '4️⃣' not in emoji:
+                            await qmsg.add_reaction('4️⃣')
+                        if '5️⃣' not in emoji:
+                            await qmsg.add_reaction('5️⃣')
+                        if '6️⃣' not in emoji:
+                            await qmsg.add_reaction('6️⃣')
+
+                        def check(reaction, user):
+                            return user == message.author and str(reaction.emoji) in sent_emoji
+
+                        try:
+                            reaction, _ = await client.wait_for('reaction_add', timeout=60.0, check=check)
+                            type = StoryElement.ELEMENT_TYPE_CHOICES[[i for i, t in enumerate(StoryElement.ELEMENT_TYPE_CHOICES) if sent_emoji[reaction.emoji] in t][0]][0]
+                            list = await list_notes_by_type(message.author.id, element, type, story)
+                            msg = element + " notes:\n"
+                            for note in list:
+                                msg = msg + '* ' + note + '\n'
+                            await qmsg.delete()
+                            await message.channel.send(message.author.mention+ ' ' + msg)
+                        except asyncio.TimeoutError:
+                            await qmsg.delete()
+                            await message.channel.send('Timeout. Try again.')
 
         @client.event
         async def on_connect():
