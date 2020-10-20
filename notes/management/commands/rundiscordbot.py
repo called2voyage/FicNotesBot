@@ -64,18 +64,7 @@ class Command(BaseCommand):
 
         @sync_to_async
         def save_element(message, name, story, type):
-            element = None
-            if DiscordUser.objects.filter(user_id=message.author.id).exists():
-                user = DiscordUser.objects.get(user_id=message.author.id)
-                if Story.objects.filter(owner=user, name=story).exists():
-                    story = Story.objects.get(owner=user, name=story)
-                    element = StoryElement(story=story, type=type, name=name)
-                    element.save()
-                else:
-                    raise StoryNotFoundError
-            else:
-                raise UserNotCreatedError
-            return story.name, element.name
+            return save_element_sync(message, name, story, type)
 
         def save_element_sync(message, name, story, type):
             element = None
@@ -141,6 +130,14 @@ class Command(BaseCommand):
             else:
                 raise UserNotCreatedError
             return element.name
+
+        @sync_to_async
+        def list_stories(user):
+            if DiscordUser.objects.filter(user_id=user).exists():
+                user = DiscordUser.objects.get(user_id=user)
+                return [s.name for s in Story.objects.filter(owner=user)]
+            else:
+                raise UserNotCreatedError
 
         @client.event
         async def on_message(message):
@@ -280,6 +277,16 @@ class Command(BaseCommand):
                         except asyncio.TimeoutError:
                             await msg.delete()
                             await message.channel.send('Timeout. Try again.')
+            if message.content.startswith('!ficnotesbot list '):
+                if message.content.startswith('!ficnotesbot list stories'):
+                    try:
+                        list = await list_stories(message.author.id)
+                        msg = "You have the following stories:\n"
+                        for story in list:
+                            msg = msg + '* ' + story + '\n'
+                        await message.channel.send(message.author.mention+ ' ' + msg)
+                    except UserNotCreatedError:
+                        await message.channel.send(message.author.mention+ ' You have not created any stories yet.')
 
         @client.event
         async def on_connect():
