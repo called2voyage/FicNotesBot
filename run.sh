@@ -1,5 +1,6 @@
 #!/bin/sh
 
-cd $1
+DIR=$1
+cd "$DIR"
 
 python3 manage.py rundiscordbot
